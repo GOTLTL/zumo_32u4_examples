@@ -6,6 +6,7 @@ Zumo32U4LCD lcd;
 Zumo32U4ProximitySensors proxSensors;
 Zumo32U4ButtonA buttonA;
 Zumo32U4Motors motors;
+Zumo32U4Encoders encoders;
 LSM303 lsm303; // Accelerometer
 L3G gyro;
 
@@ -30,7 +31,7 @@ const int acceleration = 1;
 
 State state = pause_state;
 int curSpeed = 0;
-float COUNTPERCM = 100.0
+float COUNTPERCM = 100.0;
 
 // --- Support Functions ---
 
@@ -80,19 +81,25 @@ void forward(float distance) {
   motors.setSpeeds(curSpeed + (angle * 5), curSpeed - (angle * 5));
 }
 
+void moveForward() {
+  motors.setSpeeds(curSpeed,curSpeed);
+}
+
 // Back up!
-void reverse() {
-  motors.setSpeeds(-motorSpeed, -motorSpeed);
+void reverse(float distance) {
+  turnSensorUpdate();
+  int angle = (((int32_t)turnAngle >> 16) * 360) >> 16;
+  // Move foward, adjusting motor speed to hold heading
+  motors.setSpeeds(-curSpeed + (angle * 5), -curSpeed - (angle * 5));
 }
 
-// Look left
-void scanLeft() {
-  motors.setSpeeds(-curSpeed, curSpeed);
-}
-
-// Look right
-void scanRight() {
-  motors.setSpeeds(curSpeed, -curSpeed);
+void deposit() {
+  motors.setSpeeds(400,400);
+  forward(20);
+  reverse(10);
+  turnLeft(180);
+  motors.setSpeeds(200,200);
+  forward(10); //now back at the beginning of the box
 }
 
 // --- Setup ---
@@ -132,33 +139,102 @@ void loop() {
   int16_t y = lsm303.a.y;
   int32_t magnitudeSquared = (int32_t)x * x + (int32_t)y * y;
 
-  // Change states
-  if (state == pause_state) {
-    if (buttonPress) {
-      state = forward_state;
-      turnSensorReset();
-    }
+   // record left side length during first left side scan
+  turnLeft(90);
+  int i = encoders.getCountsAndResetLeft();
+  while (centerLeftSensor <= 6) {
+    moveForward();
   }
-  else if (buttonPress) {
-    state = pause_state;
+  forward(2);
+  stop();
+  int recorded_left_length = i;
+  delay(500);
+
+  // record vertical length during first vertical length scan
+  turnRight(90);
+  int j = encoders.getCountsAndResetLeft();
+  while (centerLeftSensor <= 6) {
+    moveForward();
+  }
+  forward(2);
+  stop();
+  int recorded_vertical_length = j;
+  delay(500);
+
+  //first return to deposit
+  turnRight(180);
+  motors.setSpeeds(100,100);
+  forward(recorded_vertical_length);
+  turnLeft(90);
+  forward(recorded_left_length);
+  turnRight(90);
+  deposit();
+
+  //scoop+scan the full left side
+  int a = 0;
+  while (a <= 6) {
+    turnLeft(90);
+    forward(recorded_left_length - a);
+    turnRight(90);
+    forward(recorded_vertical_length);
+    motors.setSpeeds(100,100);
+    turnRight(180);
+    forward(recorded_vertical_length);
+    turnLeft(90);
+    forward(recorded_left_length - a);
+    turnRight(90);
+    deposit();
+    a++;
+  }
+
+  //scoop+scan middle
+  forward(recorded_vertical_length);
+  motors.setSpeeds(100,100);
+  turnRight(180);
+  forward(recorded_vertical_length);
+  deposit();
+
+  //record right side length during first right side scan
+  turnRight(90);
+  int l = encoders.getCountsAndResetRight();
+  while (centerRightSensor <= 6) {
+    moveForward();
+  }
+  forward(2);
+  stop();
+  int recorded_right_length = l;
+  delay(500);
+
+  //first scoop and scan right
+  turnLeft(90);
+  forward(recorded_vertical_length);
+  motors.setSpeeds(100,100);
+  turnLeft(180);
+  forward(recorded_vertical_length);
+  turnRight(90);
+  forward(recorded_right_length);
+  turnLeft(90);
+  deposit();
+
+  //scoop+scan the full right side
+  int b = 0;
+  while (b <= 6) {
+    turnRight(90);
+    forward(recorded_right_length - b);
+    turnLeft(90);
+    forward(recorded_vertical_length);
+    motors.setSpeeds(100,100);
+    turnLeft(180);
+    forward(recorded_vertical_length);
+    turnRight(90);
+    forward(recorded_right_length - b);
+    turnLeft(90);
+    deposit();
+    b++;
   }
 }
 
-
-  // Sensor display
-  lcd.gotoXY(0, 1);
-  lcd.print(left_sensor);
-  lcd.print(" ");
-  lcd.print(centerLeftSensor);
-  lcd.print(" ");
-  lcd.print(centerRightSensor);
-  lcd.print(" ");
-  lcd.print(right_sensor);
-
-  delay(2);
-}
-
-//MIT License
+//MIT License (for the code of turning angles and moving forward (int distance))
 
 //Copyright (c) 2016 Paul V Craven
 
