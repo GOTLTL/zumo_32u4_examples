@@ -14,7 +14,7 @@ L3G gyro;
 // --- Constants ---
 
 const uint16_t motorSpeed = 200;
-const uint16_t turnSpeed = 200;
+const uint16_t turnSpeed = 100;
 const int acceleration = 1;
 
 // --- Global Variables ---
@@ -62,33 +62,32 @@ void stop() {
 }
 
 // Go forward
-void forward(int distance) {
-  // Get out heading
-  turnSensorUpdate();
-  int angle = (((int32_t)turnAngle >> 16) * 360) >> 16;
-  // Move foward, adjusting motor speed to hold heading
-  motors.setSpeeds(curSpeed + (angle * 5), curSpeed - (angle * 5));
-}
-
-void moveForward() {
-  motors.setSpeeds(curSpeed,curSpeed);
+void forward(int16_t Zspeed, float distance) {
+  int countMax = int (COUNTPERCM * distance);
+  while(encoders.getCountsLeft()<countMax) {
+    motors.setSpeeds(Zspeed,Zspeed);
+    delay(100);
+  }
+  motors.setSpeeds(0,0);
+  encoders.getCountsAndResetLeft();
 }
 
 // Back up!
-void reverse(int distance) {
-  turnSensorUpdate();
-  int angle = (((int32_t)turnAngle >> 16) * 360) >> 16;
-  // Move foward, adjusting motor speed to hold heading
-  motors.setSpeeds(-curSpeed + (angle * 5), -curSpeed - (angle * 5));
+void reverse(int16_t Zspeed, float distance) {
+  int countMax = int (COUNTPERCM * distance);
+  while(encoders.getCountsLeft()<countMax) {
+    motors.setSpeeds(-Zspeed,-Zspeed);
+    delay(100);
+  }
+  motors.setSpeeds(0,0);
+  encoders.getCountsAndResetLeft();
 }
 
 void deposit() {
-  motors.setSpeeds(400,400);
-  forward(20);
-  reverse(10);
+  forward(400, 40);
+  reverse(400, 20);
   turnLeft(180);
-  motors.setSpeeds(200,200);
-  forward(10); //now back at the beginning of the box
+  forward(200, 20); //now back at the beginning of the box
 }
 
 // --- Setup ---
@@ -106,6 +105,8 @@ void setup() {
   turnSensorSetup();
   delay(500);
   turnSensorReset();
+
+  buttonA.waitForButton();
 }
 
 // --- Main Loop ---
@@ -127,32 +128,32 @@ void loop() {
 
    // record left side length during first left side scan
   turnLeft(90);
-  int i = encoders.getCountsAndResetLeft();
+  curSpeed = 200;
+  int i = encoders.getCountsAndResetRight();
   while (centerLeftSensor <= 6) {
-    moveForward();
+    forward(100, 5.0);
   }
-  forward(2);
+  forward(100, 15.0);
   stop();
   int recorded_left_length = i;
   delay(500);
 
   // record vertical length during first vertical length scan
   turnRight(90);
-  int j = encoders.getCountsAndResetLeft();
+  int j = encoders.getCountsAndResetRight();
   while (centerLeftSensor <= 6) {
-    moveForward();
+    forward(100, 5.0);
   }
-  forward(2);
+  forward(100,15);
   stop();
   int recorded_vertical_length = j;
   delay(500);
 
   //first return to deposit
   turnRight(180);
-  motors.setSpeeds(100,100);
-  forward(recorded_vertical_length);
+  forward(200, recorded_vertical_length);
   turnLeft(90);
-  forward(recorded_left_length);
+  forward(200, recorded_left_length);
   turnRight(90);
   deposit();
 
@@ -160,45 +161,44 @@ void loop() {
   int a = 0;
   while (a <= 6) {
     turnLeft(90);
-    forward(recorded_left_length - a);
+    forward(200, recorded_left_length - a);
     turnRight(90);
-    forward(recorded_vertical_length);
-    motors.setSpeeds(100,100);
+    forward(200, recorded_vertical_length);
+    curSpeed = 100;
     turnRight(180);
-    forward(recorded_vertical_length);
+    forward(200, recorded_vertical_length);
     turnLeft(90);
-    forward(recorded_left_length - a);
+    forward(200, recorded_left_length - a);
     turnRight(90);
     deposit();
     a++;
   }
 
   //scoop+scan middle
-  forward(recorded_vertical_length);
-  motors.setSpeeds(100,100);
+  forward(100, recorded_vertical_length);
   turnRight(180);
-  forward(recorded_vertical_length);
+  forward(100, recorded_vertical_length);
   deposit();
 
   //record right side length during first right side scan
   turnRight(90);
   int l = encoders.getCountsAndResetRight();
   while (centerRightSensor <= 6) {
-    moveForward();
+    forward(100, 5.0);
   }
-  forward(2);
+  forward(100, 15.0);
   stop();
   int recorded_right_length = l;
   delay(500);
 
   //first scoop and scan right
   turnLeft(90);
-  forward(recorded_vertical_length);
+  forward(200, recorded_vertical_length);
   motors.setSpeeds(100,100);
   turnLeft(180);
-  forward(recorded_vertical_length);
+  forward(200, recorded_vertical_length);
   turnRight(90);
-  forward(recorded_right_length);
+  forward(200, recorded_right_length);
   turnLeft(90);
   deposit();
 
@@ -206,18 +206,19 @@ void loop() {
   int b = 0;
   while (b <= 6) {
     turnRight(90);
-    forward(recorded_right_length - b);
+    forward(200, recorded_right_length - b);
     turnLeft(90);
-    forward(recorded_vertical_length);
+    forward(200, recorded_vertical_length);
     motors.setSpeeds(100,100);
     turnLeft(180);
-    forward(recorded_vertical_length);
+    forward(200, recorded_vertical_length);
     turnRight(90);
-    forward(recorded_right_length - b);
+    forward(200, recorded_right_length - b);
     turnLeft(90);
     deposit();
     b++;
   }
+  delay(3000);
 }
 
 //MIT License (for the code of turning angles and moving forward (int distance))
